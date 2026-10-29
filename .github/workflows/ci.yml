@@ -1,0 +1,18 @@
+name: Rust
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust
+        run: rustup show active-toolchain
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --release --locked
+      - name: Real terminal smoke test
+        run: |
+          python3 -m venv /tmp/algotype-test
+          /tmp/algotype-test/bin/pip install -r tests/requirements.txt
+          ALGOTYPE_BIN=target/release/algotype /tmp/algotype-test/bin/python tests/terminal_smoke.py
