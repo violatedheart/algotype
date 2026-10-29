@@ -1,0 +1,104 @@
+name: Standalone binaries
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.asset }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            asset: algotype-linux-x86_64
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            asset: algotype-macos-arm64
+    runs-on: ${{ matrix.runner }}
+    env:
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: s
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned Rust and target
+        run: |
+          rustup toolchain install 1.90.0 --profile minimal
+          rustup target add --toolchain 1.90.0 '${{ matrix.target }}'
+      - name: Build static Linux executable
+        if: runner.os == 'Linux'
+        run: cargo +1.90.0 build --release --locked --target x86_64-unknown-linux-musl --config 'target.x86_64-unknown-linux-musl.linker="rust-lld"'
+      - name: Build native Apple Silicon executable
+        if: runner.os == 'macOS'
+        run: |
+          test "$(uname -m)" = arm64
+          cargo +1.90.0 build --release --locked --target aarch64-apple-darwin
+          codesign --force --sign - target/aarch64-apple-darwin/release/algotype
+          codesign --verify --strict target/aarch64-apple-darwin/release/algotype
+          lipo target/aarch64-apple-darwin/release/algotype -verify_arch arm64
+      - name: Stage executable
+        run: |
+          mkdir -p dist
+          cp 'target/${{ matrix.target }}/release/algotype' 'dist/${{ matrix.asset }}'
+          chmod 755 'dist/${{ matrix.asset }}'
+          file 'dist/${{ matrix.asset }}'
+          'dist/${{ matrix.asset }}' --version
+      - name: Verify Linux has no dynamic loader
+        if: runner.os == 'Linux'
+        run: |
+          if readelf -l dist/algotype-linux-x86_64 | grep -q INTERP; then
+            echo 'Unexpected dynamic loader: this binary must be self-contained.' >&2
+            exit 1
+          fi
+      - name: Unit and persistence tests on native host
+        run: cargo +1.90.0 test --locked
+      - name: Exercise the packaged executable in a real terminal
+        env:
+          ALGOTYPE_BIN: ${{ github.workspace }}/dist/${{ matrix.asset }}
+        run: |
+          python3 -m venv /tmp/algotype-release-test
+          /tmp/algotype-release-test/bin/pip install -r tests/requirements.txt
+          /tmp/algotype-release-test/bin/python tests/terminal_smoke.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+
+  release:
+    name: Publish verified executables
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum algotype-linux-x86_64 algotype-macos-arm64 > SHA256SUMS
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          cat > /tmp/algotype-release-notes.md <<'NOTES'
+          Standalone executables: no Rust, compiler, accounts, or runtime internet access required.
+
+          - `algotype-linux-x86_64`: static Intel/AMD 64-bit Linux executable (musl).
+          - `algotype-macos-arm64`: Apple Silicon macOS 11+ executable, ad-hoc signed; not Apple notarized.
+          - `SHA256SUMS`: SHA-256 checksums of both executables.
+
+          Download the file for your computer, rename it to `algotype`, then run `chmod +x algotype` and `./algotype` in a terminal. Installation and PATH instructions are in the repository README.
+
+          Both binaries are built from this tag and must pass native tests and a real PTY typing/save/reopen workflow before publication.
+          NOTES
+          gh release create "$RELEASE_TAG" --verify-tag --title "Algotype $RELEASE_TAG" --notes-file /tmp/algotype-release-notes.md dist/algotype-linux-x86_64 dist/algotype-macos-arm64 dist/SHA256SUMS

@@ -6,7 +6,52 @@ Offline typing practice in Rust and Ratatui. A restrained, borderless interface;
 
 ![Algotype practice](docs/practice.png)
 
-## Install on Unix
+## Download a standalone app (no Rust required)
+
+Choose the executable for your computer from [the latest release](https://github.com/violatedheart/algotype/releases/latest):
+
+| Computer | Download |
+| --- | --- |
+| Linux, Intel/AMD 64-bit | [algotype-linux-x86_64](https://github.com/violatedheart/algotype/releases/latest/download/algotype-linux-x86_64) |
+| macOS, Apple Silicon (M1/M2/M3/M4 and later) | [algotype-macos-arm64](https://github.com/violatedheart/algotype/releases/latest/download/algotype-macos-arm64) |
+
+Each download is **one small executable** with the vocabulary bundled inside. Your friends do not need Rust, Cargo, a compiler, a cloned repository, or an account. The Linux build is statically linked with musl, so it does not require a particular glibc installation. The macOS build targets macOS 11 or newer and uses standard macOS system libraries. These are separate operating-system binaries, not a universal file.
+
+On **Linux x86-64**, download it in a terminal:
+
+```sh
+curl -fL https://github.com/violatedheart/algotype/releases/latest/download/algotype-linux-x86_64 -o algotype
+```
+
+On **Apple Silicon macOS**, use this download instead:
+
+```sh
+curl -fL https://github.com/violatedheart/algotype/releases/latest/download/algotype-macos-arm64 -o algotype
+```
+
+Then, on either system:
+
+```sh
+chmod +x algotype
+./algotype
+```
+
+To make **`algotype`** available from any directory, install the downloaded file into your own bin directory (no administrator access needed):
+
+```sh
+mkdir -p "$HOME/.local/bin"
+install -m 755 ./algotype "$HOME/.local/bin/algotype"
+export PATH="$HOME/.local/bin:$PATH"
+algotype
+```
+
+Add the `export PATH` line to `~/.bashrc` (Bash) or `~/.zshrc` (Zsh) to keep it in new terminals. `NO_COLOR= algotype` enables the palettes if your shell sets `NO_COLOR`.
+
+The release includes `SHA256SUMS`. To check a download, run `sha256sum algotype` on Linux or `shasum -a 256 algotype` on macOS and compare it with the entry for your platform. The macOS binary is ad-hoc signed, not Developer ID signed or notarized; if macOS blocks a trusted, verified download, use its **Privacy & Security → Open Anyway** flow.
+
+The release workflow builds on native Linux and Apple Silicon macOS runners, runs the Rust tests and a real terminal typing/save/reopen check, and publishes only after both builds pass. To update, install the new binary using the same steps; progress lives separately from the executable.
+
+## Install from source on Unix
 
 Install once, then launch from any directory with **`algotype`**. These commands are for a POSIX shell such as Bash or Zsh on Linux or macOS.
 
